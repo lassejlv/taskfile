@@ -26,14 +26,28 @@ impl EnvParser {
     }
 
     pub fn load_env_files(&self) -> Result<(), Box<dyn std::error::Error>> {
+        self.load_env_files_with_base_path(None)
+    }
+
+    pub fn load_env_files_with_base_path(
+        &self,
+        base_path: Option<&std::path::Path>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(env_config) = &self.config {
             for file_path in &env_config.files {
-                if std::path::Path::new(file_path).exists() {
-                    match self.load_env_file(file_path) {
+                let full_path = if let Some(base) = base_path {
+                    base.join(file_path)
+                } else {
+                    std::path::PathBuf::from(file_path)
+                };
+
+                if full_path.exists() {
+                    let path_str = full_path.to_string_lossy();
+                    match self.load_env_file(&path_str) {
                         Ok(count) => {
-                            println!("Loaded {} environment variables from: {}", count, file_path)
+                            println!("Loaded {} environment variables from: {}", count, path_str)
                         }
-                        Err(e) => eprintln!("Warning: Failed to load {}: {}", file_path, e),
+                        Err(e) => eprintln!("Warning: Failed to load {}: {}", path_str, e),
                     }
                 }
             }

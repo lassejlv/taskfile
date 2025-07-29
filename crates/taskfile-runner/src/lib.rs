@@ -31,7 +31,8 @@ impl TaskRunner {
 
         let env_parser = if let Some(env_config) = &taskfile.env {
             let parser = EnvParser::with_config(env_config.clone());
-            parser.load_env_files()?;
+            let taskfile_dir = std::path::Path::new(taskfile_path).parent();
+            parser.load_env_files_with_base_path(taskfile_dir)?;
             parser
         } else {
             EnvParser::new()
@@ -44,9 +45,13 @@ impl TaskRunner {
     }
 
     pub fn new(taskfile: TaskFile) -> Self {
+        Self::new_with_base_path(taskfile, None)
+    }
+
+    pub fn new_with_base_path(taskfile: TaskFile, base_path: Option<&std::path::Path>) -> Self {
         let env_parser = if let Some(env_config) = &taskfile.env {
             let parser = EnvParser::with_config(env_config.clone());
-            if let Err(e) = parser.load_env_files() {
+            if let Err(e) = parser.load_env_files_with_base_path(base_path) {
                 eprintln!("{} Error loading environment files: {}", "✗".red(), e);
             }
             parser
