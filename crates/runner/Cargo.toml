@@ -12,3 +12,4 @@ toml = "0.8.10"
 tokio = { version = "1.47.0", features = ["full"] }
 colored = "2.0"
 indicatif = "0.17.8"
+serde_json = "1.0"

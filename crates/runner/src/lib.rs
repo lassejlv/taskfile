@@ -3,11 +3,13 @@ use env_parser::{EnvConfig, EnvParser};
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::env;
+
 use std::process::Stdio;
 use std::time::Instant;
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
-use tokio::time::{Duration, sleep};
+use tokio::time::{sleep, Duration};
 
 #[derive(Debug, Deserialize)]
 pub struct TaskFile {
@@ -25,6 +27,7 @@ pub struct Task {
 pub struct TaskRunner {
     taskfile: TaskFile,
     env_parser: EnvParser,
+    enhanced_path: Option<String>,
 }
 
 impl TaskRunner {
@@ -41,9 +44,12 @@ impl TaskRunner {
             EnvParser::new()
         };
 
+        let enhanced_path = Self::setup_enhanced_path().await;
+
         Ok(Self {
             taskfile,
             env_parser,
+            enhanced_path,
         })
     }
 
@@ -62,9 +68,14 @@ impl TaskRunner {
             EnvParser::new()
         };
 
+        let enhanced_path = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(Self::setup_enhanced_path())
+        });
+
         Self {
             taskfile,
             env_parser,
+            enhanced_path,
         }
     }
 
@@ -78,6 +89,46 @@ impl TaskRunner {
     fn parse_taskfile(contents: &str) -> Result<TaskFile, toml::de::Error> {
         let taskfile: TaskFile = toml::from_str(contents)?;
         Ok(taskfile)
+    }
+
+    async fn check_npm_script(script_name: &str) -> Option<String> {
+        if let Ok(contents) = tokio::fs::read_to_string("package.json").await {
+            if let Ok(package_json) = serde_json::from_str::<serde_json::Value>(&contents) {
+                if let Some(scripts) = package_json.get("scripts") {
+                    if let Some(script) = scripts.get(script_name) {
+                        if let Some(script_cmd) = script.as_str() {
+                            return Some(script_cmd.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    async fn setup_enhanced_path() -> Option<String> {
+        if tokio::fs::try_exists("package.json").await.unwrap_or(false) {
+            let mut enhanced_path = String::new();
+
+            let node_modules_bin = std::path::Path::new("node_modules/.bin");
+            if node_modules_bin.exists() {
+                if let Ok(canonical) = node_modules_bin.canonicalize() {
+                    enhanced_path.push_str(&canonical.to_string_lossy());
+                }
+            }
+
+            if let Ok(current_path) = env::var("PATH") {
+                if !enhanced_path.is_empty() {
+                    enhanced_path.push(':');
+                }
+                enhanced_path.push_str(&current_path);
+            }
+
+            if !enhanced_path.is_empty() {
+                return Some(enhanced_path);
+            }
+        }
+        None
     }
 
     pub fn list_tasks(&self) {
@@ -220,10 +271,33 @@ impl TaskRunner {
                     return Err(format!("Empty command for task '{}'", task_name).into());
                 }
 
-                let command = parts[0];
-                let args = &parts[1..];
+                let (command, args): (String, Vec<&str>) =
+                    if let Some(_npm_script) = Self::check_npm_script(parts[0]).await {
+                        // If the first part is an npm script, run it with npm/yarn
+                        let package_manager =
+                            if tokio::fs::try_exists("yarn.lock").await.unwrap_or(false) {
+                                "yarn"
+                            } else if tokio::fs::try_exists("pnpm-lock.yaml")
+                                .await
+                                .unwrap_or(false)
+                            {
+                                "pnpm"
+                            } else {
+                                "npm"
+                            };
 
-                // Create and configure the spinner
+                        let mut npm_args = vec!["run", parts[0]];
+                        npm_args.extend_from_slice(&parts[1..]);
+                        (package_manager.to_string(), npm_args)
+                    } else {
+                        let node_bin_path = format!("node_modules/.bin/{}", parts[0]);
+                        if tokio::fs::try_exists(&node_bin_path).await.unwrap_or(false) {
+                            (node_bin_path, parts[1..].to_vec())
+                        } else {
+                            (parts[0].to_string(), parts[1..].to_vec())
+                        }
+                    };
+
                 let pb = ProgressBar::new_spinner();
                 pb.set_style(
                     ProgressStyle::default_spinner()
@@ -236,13 +310,17 @@ impl TaskRunner {
 
                 let start_time = Instant::now();
 
-                let child = Command::new(command)
-                    .args(args)
+                let mut cmd = Command::new(&command);
+                cmd.args(&args)
                     .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .spawn()?;
+                    .stderr(Stdio::piped());
 
-                // Spawn a task to update the spinner periodically
+                if let Some(enhanced_path) = &self.enhanced_path {
+                    cmd.env("PATH", enhanced_path);
+                }
+
+                let child = cmd.spawn()?;
+
                 let pb_clone = pb.clone();
                 let task_name_clone = task_name.to_string();
                 let cmd_clone = substituted_cmd.clone();
@@ -264,11 +342,9 @@ impl TaskRunner {
                 let output = child.wait_with_output().await?;
                 let elapsed = start_time.elapsed();
 
-                // Stop the spinner task
                 spinner_task.abort();
                 pb.finish_and_clear();
 
-                // Print any output
                 if !output.stdout.is_empty() {
                     print!("{}", String::from_utf8_lossy(&output.stdout));
                 }

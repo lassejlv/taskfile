@@ -17,7 +17,6 @@ async fn main() {
 
     let taskfile_name = "Taskfile.toml";
 
-    // Handle commands that don't require a taskfile first
     match matches.get_one::<String>("command") {
         Some(cmd) if cmd == "version" => {
             println!("taskfile-runner v{}", env!("CARGO_PKG_VERSION"));
@@ -48,7 +47,6 @@ async fn main() {
         _ => {}
     }
 
-    // Auto-initialize taskfile if it doesn't exist
     if !tokio::fs::try_exists(taskfile_name).await.unwrap_or(false) {
         println!("No Taskfile.toml found. Creating a default one...");
         match init_taskfile().await {
@@ -60,7 +58,6 @@ async fn main() {
         }
     }
 
-    // Now handle commands that require a taskfile
     match TaskRunner::from_file(taskfile_name).await {
         Ok(runner) => match matches.get_one::<String>("command") {
             Some(cmd) if cmd == "list" => {
@@ -141,10 +138,7 @@ async fn init_taskfile() -> Result<(), Box<dyn std::error::Error>> {
         return Err("Taskfile.toml already exists".into());
     }
 
-    let default_content = r#"# Taskfile.toml - Task runner configuration
-# Documentation: https://github.com/lassejlv/taskfile
-
-[tasks.hello]
+    let default_content = r#"[tasks.hello]
 cmd = "echo 'Hello, World!'"
 desc = "Print hello world message"
 
