@@ -9,7 +9,7 @@ async fn main() {
         .about("A simple task runner")
         .arg(
             Arg::new("command")
-                .help("The command to run (list, version, update, or task name)")
+                .help("The command to run (list, version, update, init, or task name)")
                 .value_name("COMMAND")
                 .index(1),
         )
@@ -17,49 +17,69 @@ async fn main() {
 
     let taskfile_name = "Taskfile.toml";
 
-    match tokio::fs::try_exists(taskfile_name).await {
-        Ok(true) => match TaskRunner::from_file(taskfile_name).await {
-            Ok(runner) => match matches.get_one::<String>("command") {
-                Some(cmd) if cmd == "list" => {
-                    runner.list_tasks();
-                }
-                Some(cmd) if cmd == "version" => {
-                    println!("taskfile-runner v{}", env!("CARGO_PKG_VERSION"));
-                    println!("A simple task runner written in Rust");
-                }
-                Some(cmd) if cmd == "update" => {
-                    println!("Updating task runner...");
-                    match update_task_runner().await {
-                        Ok(_) => println!("✓ Update completed successfully!"),
-                        Err(e) => {
-                            eprintln!("{} Update failed: {}", "✗".red(), e);
-                            std::process::exit(1);
-                        }
-                    }
-                }
-                Some(task_name) => {
-                    if let Err(e) = runner.run_task(task_name).await {
-                        eprintln!("{} Error running task '{}': {}", "✗".red(), task_name, e);
-                        std::process::exit(1);
-                    }
-                }
-                None => {
-                    println!("Please specify a task to run or use 'list' to see available tasks.");
-                    println!("Usage: task <task_name> | list | version | update");
+    // Handle commands that don't require a taskfile first
+    match matches.get_one::<String>("command") {
+        Some(cmd) if cmd == "version" => {
+            println!("taskfile-runner v{}", env!("CARGO_PKG_VERSION"));
+            println!("A simple task runner written in Rust");
+            return;
+        }
+        Some(cmd) if cmd == "update" => {
+            println!("Updating task runner...");
+            match update_task_runner().await {
+                Ok(_) => println!("✓ Update completed successfully!"),
+                Err(e) => {
+                    eprintln!("{} Update failed: {}", "✗".red(), e);
                     std::process::exit(1);
                 }
-            },
+            }
+            return;
+        }
+        Some(cmd) if cmd == "init" => {
+            match init_taskfile().await {
+                Ok(_) => println!("✓ Taskfile.toml created successfully!"),
+                Err(e) => {
+                    eprintln!("{} Failed to create Taskfile.toml: {}", "✗".red(), e);
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        _ => {}
+    }
+
+    // Auto-initialize taskfile if it doesn't exist
+    if !tokio::fs::try_exists(taskfile_name).await.unwrap_or(false) {
+        println!("No Taskfile.toml found. Creating a default one...");
+        match init_taskfile().await {
+            Ok(_) => println!("✓ Taskfile.toml created successfully!"),
             Err(e) => {
-                eprintln!("{} Error loading taskfile: {}", "✗".red(), e);
+                eprintln!("{} Failed to create Taskfile.toml: {}", "✗".red(), e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // Now handle commands that require a taskfile
+    match TaskRunner::from_file(taskfile_name).await {
+        Ok(runner) => match matches.get_one::<String>("command") {
+            Some(cmd) if cmd == "list" => {
+                runner.list_tasks();
+            }
+            Some(task_name) => {
+                if let Err(e) = runner.run_task(task_name).await {
+                    eprintln!("{} Error running task '{}': {}", "✗".red(), task_name, e);
+                    std::process::exit(1);
+                }
+            }
+            None => {
+                println!("Please specify a task to run or use 'list' to see available tasks.");
+                println!("Usage: task <task_name> | list | version | update | init");
                 std::process::exit(1);
             }
         },
-        Ok(false) => {
-            eprintln!("{} Taskfile '{}' does not exist", "✗".red(), taskfile_name);
-            std::process::exit(1);
-        }
         Err(e) => {
-            eprintln!("{} Error checking taskfile existence: {}", "✗".red(), e);
+            eprintln!("{} Error loading taskfile: {}", "✗".red(), e);
             std::process::exit(1);
         }
     }
@@ -112,4 +132,40 @@ async fn update_task_runner() -> Result<(), Box<dyn std::error::Error>> {
         eprint!("{}", String::from_utf8_lossy(&output.stderr));
         Err("Update installation failed".into())
     }
+}
+
+async fn init_taskfile() -> Result<(), Box<dyn std::error::Error>> {
+    let taskfile_name = "Taskfile.toml";
+
+    if tokio::fs::try_exists(taskfile_name).await? {
+        return Err("Taskfile.toml already exists".into());
+    }
+
+    let default_content = r#"# Taskfile.toml - Task runner configuration
+# Documentation: https://github.com/lassejlv/taskfile
+
+[tasks.hello]
+cmd = "echo 'Hello, World!'"
+desc = "Print hello world message"
+
+[tasks.build]
+cmd = "echo 'Building project...'"
+desc = "Build the project"
+
+[tasks.test]
+cmd = "echo 'Running tests...'"
+desc = "Run tests"
+
+[tasks.clean]
+cmd = "echo 'Cleaning build artifacts...'"
+desc = "Clean build artifacts"
+
+[tasks.dev]
+cmd = "echo 'Starting development server...'"
+desc = "Start development server"
+depends_on = ["build"]
+"#;
+
+    tokio::fs::write(taskfile_name, default_content).await?;
+    Ok(())
 }
