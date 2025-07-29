@@ -60,8 +60,9 @@ detect_platform() {
 
 get_latest_version() {
     curl -s "https://api.github.com/repos/${OWNER}/${REPO}/releases/latest" | \
-        grep '"tag_name":' | \
-        sed -E 's/.*"([^"]+)".*/\1/'
+        grep -o '"tag_name": *"[^"]*"' | \
+        grep -o '"[^"]*"$' | \
+        sed 's/"//g'
 }
 
 
