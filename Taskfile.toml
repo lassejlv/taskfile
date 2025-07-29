@@ -56,6 +56,14 @@ desc = "Test complex environment variable combinations"
 cmd = "echo 'Edge cases: $USER_NAME$ $123INVALID $$ normal_text $USER_NAME-suffix'"
 desc = "Test edge cases in environment variable parsing"
 
+[tasks.sleep]
+cmd = "sleep 3"
+desc = "Sleep for 3 seconds to demonstrate spinner and timer"
+
+[tasks.long-task]
+cmd = "sh -c 'for i in {1..5}; do echo \"Step $i of 5\"; sleep 1; done; echo \"Long task completed!\"'"
+desc = "A longer task with multiple steps to demonstrate spinner"
+
 [tasks.circular-a]
 cmd = "echo 'Task A'"
 desc = "Task A in circular dependency"

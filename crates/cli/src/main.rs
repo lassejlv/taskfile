@@ -1,6 +1,6 @@
 use clap::{Arg, Command};
 use colored::*;
-use taskfile_runner::TaskRunner;
+use runner::TaskRunner;
 
 #[tokio::main]
 async fn main() {

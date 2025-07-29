@@ -1,10 +1,13 @@
 use colored::*;
 use env_parser::{EnvConfig, EnvParser};
+use indicatif::{ProgressBar, ProgressStyle};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::process::Stdio;
+use std::time::Instant;
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
+use tokio::time::{Duration, sleep};
 
 #[derive(Debug, Deserialize)]
 pub struct TaskFile {
@@ -211,7 +214,6 @@ impl TaskRunner {
                 }
 
                 let substituted_cmd = self.env_parser.substitute_env_vars(&task.cmd);
-                println!("Running task '{}': {}", task_name, substituted_cmd);
 
                 let parts: Vec<&str> = substituted_cmd.split_whitespace().collect();
                 if parts.is_empty() {
@@ -221,14 +223,52 @@ impl TaskRunner {
                 let command = parts[0];
                 let args = &parts[1..];
 
+                // Create and configure the spinner
+                let pb = ProgressBar::new_spinner();
+                pb.set_style(
+                    ProgressStyle::default_spinner()
+                        .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+                        .template("{spinner:.cyan} {msg} [{elapsed_precise}]")
+                        .unwrap(),
+                );
+                pb.set_message(format!("Running task '{}': {}", task_name, substituted_cmd));
+                pb.enable_steady_tick(Duration::from_millis(80));
+
+                let start_time = Instant::now();
+
                 let child = Command::new(command)
                     .args(args)
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped())
                     .spawn()?;
 
-                let output = child.wait_with_output().await?;
+                // Spawn a task to update the spinner periodically
+                let pb_clone = pb.clone();
+                let task_name_clone = task_name.to_string();
+                let cmd_clone = substituted_cmd.clone();
+                let spinner_task = tokio::spawn(async move {
+                    let start = Instant::now();
+                    loop {
+                        let elapsed = start.elapsed();
+                        pb_clone.set_message(format!(
+                            "Running task '{}': {} [{}]",
+                            task_name_clone,
+                            cmd_clone,
+                            format_duration(elapsed)
+                        ));
+                        sleep(Duration::from_millis(100)).await;
+                    }
+                });
 
+                // Wait for the process to complete
+                let output = child.wait_with_output().await?;
+                let elapsed = start_time.elapsed();
+
+                // Stop the spinner task
+                spinner_task.abort();
+                pb.finish_and_clear();
+
+                // Print any output
                 if !output.stdout.is_empty() {
                     print!("{}", String::from_utf8_lossy(&output.stdout));
                 }
@@ -239,18 +279,20 @@ impl TaskRunner {
 
                 if output.status.success() {
                     println!(
-                        "{} Task '{}' completed successfully",
+                        "{} Task '{}' completed successfully in {}",
                         "✓".green(),
-                        task_name
+                        task_name,
+                        format_duration(elapsed).green()
                     );
                     Ok(())
                 } else {
                     let code = output.status.code().unwrap_or(-1);
                     eprintln!(
-                        "{} Task '{}' failed with exit code {}",
+                        "{} Task '{}' failed with exit code {} after {}",
                         "✗".red(),
                         task_name,
-                        code
+                        code,
+                        format_duration(elapsed).red()
                     );
                     Err(format!("Task '{}' failed with exit code {}", task_name, code).into())
                 }
@@ -274,6 +316,29 @@ impl TaskRunner {
 
     pub fn task_count(&self) -> usize {
         self.taskfile.tasks.len()
+    }
+}
+
+fn format_duration(duration: Duration) -> String {
+    let total_secs = duration.as_secs();
+    let millis = duration.subsec_millis();
+
+    if total_secs >= 60 {
+        let mins = total_secs / 60;
+        let secs = total_secs % 60;
+        if millis > 0 {
+            format!("{}m {}s {}ms", mins, secs, millis)
+        } else {
+            format!("{}m {}s", mins, secs)
+        }
+    } else if total_secs > 0 {
+        if millis > 0 {
+            format!("{}.{}s", total_secs, millis / 100)
+        } else {
+            format!("{}s", total_secs)
+        }
+    } else {
+        format!("{}ms", millis)
     }
 }
 

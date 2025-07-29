@@ -1,17 +1,16 @@
-[workspace]
-members = ["crates/env-parser", "crates/runner", "crates/cli"]
-
 [package]
-name = "taskfile"
+name = "cli"
 version = "0.4.0"
 edition = "2024"
+description = "Fast task runner written in Rust"
+license = "MIT"
 
 [[bin]]
 name = "task"
-path = "crates/cli/src/main.rs"
+path = "src/main.rs"
 
 [dependencies]
 tokio = { version = "1.47.0", features = ["full"] }
 clap = { version = "4.4", features = ["derive"] }
 colored = "2.0"
-runner = { path = "crates/runner" }
+runner = { path = "../runner" }
