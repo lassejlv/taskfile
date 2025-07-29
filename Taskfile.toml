@@ -1,0 +1,50 @@
+[env]
+files = [".env", ".env.local"]
+
+[tasks.hello]
+cmd = "echo 'Hello, World!'"
+desc = "Print hello world message"
+
+[tasks.build]
+cmd = "cargo build"
+desc = "Build the Rust project"
+
+[tasks.test]
+cmd = "cargo test"
+desc = "Run tests"
+
+[tasks.example_task]
+cmd = "echo 'This is an example task'"
+desc = "Example task for demonstration"
+
+[tasks.clean]
+cmd = "cargo clean"
+desc = "Clean build artifacts"
+
+[tasks.run]
+cmd = "cargo run"
+desc = "Run the application"
+
+[tasks.greet]
+cmd = "echo 'Hello $USER_NAME! Welcome to $PROJECT_NAME'"
+desc = "Greet user with environment variables"
+
+[tasks.deploy]
+cmd = "echo 'Deploying to $DEPLOY_ENV environment using $API_KEY'"
+desc = "Deploy with environment-specific settings"
+
+[tasks.db-connect]
+cmd = "echo 'Connecting to database: $DB_HOST:$DB_PORT/$DB_NAME'"
+desc = "Connect to database using env variables"
+
+[tasks.test-missing]
+cmd = "echo 'Using missing variable: $MISSING_VAR and existing: $USER_NAME'"
+desc = "Test task with missing environment variable"
+
+[tasks.test-complex]
+cmd = "echo 'Complex test: $USER_NAME_$DEPLOY_ENV and $DB_HOST:$DB_PORT/test_$DB_NAME'"
+desc = "Test complex environment variable combinations"
+
+[tasks.test-edges]
+cmd = "echo 'Edge cases: $USER_NAME$ $123INVALID $$ normal_text $USER_NAME-suffix'"
+desc = "Test edge cases in environment variable parsing"

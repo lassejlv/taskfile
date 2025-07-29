@@ -1,0 +1,9 @@
+[package]
+name = "env-parser"
+version = "0.1.0"
+edition = "2021"
+description = "A simple environment variable parser and substitution library"
+license = "MIT"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }

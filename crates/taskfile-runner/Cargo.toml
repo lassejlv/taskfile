@@ -1,0 +1,13 @@
+[package]
+name = "taskfile-runner"
+version = "0.1.0"
+edition = "2021"
+description = "A task runner library for executing tasks defined in TOML files"
+license = "MIT"
+
+[dependencies]
+env-parser = { path = "../env-parser" }
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8.10"
+tokio = { version = "1.47.0", features = ["full"] }
+colored = "2.0"

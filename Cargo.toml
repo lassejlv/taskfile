@@ -1,0 +1,16 @@
+[workspace]
+members = [".", "crates/env-parser", "crates/taskfile-runner"]
+
+[package]
+name = "rust-hello-world"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "1.47.0", features = ["full"] }
+toml = "0.8.10"
+serde = { version = "1.0", features = ["derive"] }
+clap = { version = "4.4", features = ["derive"] }
+colored = "2.0"
+env-parser = { path = "crates/env-parser" }
+taskfile-runner = { path = "crates/taskfile-runner" }
