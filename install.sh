@@ -9,8 +9,8 @@ NC='\033[0m'
 
 INSTALL_DIR="$HOME/.local/bin"
 
-REPO="rust-hello-world"
-OWNER="your-username"
+REPO="taskfile"
+OWNER="lassejlv"
 
 print_info() {
     echo -e "${GREEN}[INFO]${NC} $1"

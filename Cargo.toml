@@ -2,8 +2,8 @@
 members = [".", "crates/env-parser", "crates/taskfile-runner"]
 
 [package]
-name = "rust-hello-world"
-version = "0.1.0"
+name = "taskfile"
+version = "0.2.0"
 edition = "2024"
 
 [[bin]]

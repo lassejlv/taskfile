@@ -6,16 +6,16 @@ A simple, fast task runner that executes commands defined in TOML files with env
 
 ### Option 1: Install Script (Recommended)
 ```bash
-curl -sSL https://raw.githubusercontent.com/your-username/rust-hello-world/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/lassejlv/taskfile/main/install.sh | bash
 ```
 
 ### Option 2: Download Binary
-Download the latest release for your platform from [GitHub Releases](https://github.com/your-username/rust-hello-world/releases).
+Download the latest release for your platform from [GitHub Releases](https://github.com/lassejlv/taskfile/releases).
 
 ### Option 3: Build from Source
 ```bash
-git clone https://github.com/your-username/rust-hello-world.git
-cd rust-hello-world
+git clone https://github.com/lassejlv/taskfile.git
+cd taskfile
 cargo build --release
 cp target/release/task ~/.local/bin/
 ```
