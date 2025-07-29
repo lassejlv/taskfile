@@ -50,17 +50,14 @@ impl EnvParser {
             let line = line?;
             let line = line.trim();
 
-            // Skip empty lines and comments
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
 
-            // Parse KEY=VALUE format
             if let Some(eq_pos) = line.find('=') {
                 let key = line[..eq_pos].trim();
                 let value = line[eq_pos + 1..].trim();
 
-                // Remove quotes if present
                 let value = if (value.starts_with('"') && value.ends_with('"'))
                     || (value.starts_with('\'') && value.ends_with('\''))
                 {
@@ -82,13 +79,11 @@ impl EnvParser {
     pub fn substitute_env_vars(&self, command: &str) -> String {
         let mut result = command.to_string();
 
-        // Find all $variable_name patterns
         let mut start = 0;
         while let Some(dollar_pos) = result[start..].find('$') {
             let dollar_pos = start + dollar_pos;
             let var_start = dollar_pos + 1;
 
-            // Find the end of the variable name (alphanumeric + underscore)
             let var_end = result[var_start..]
                 .find(|c: char| !c.is_alphanumeric() && c != '_')
                 .map(|pos| var_start + pos)
@@ -143,7 +138,6 @@ mod tests {
     fn test_substitute_env_vars() {
         let parser = EnvParser::new();
 
-        // Set a test environment variable
         parser.set_env_var("TEST_VAR", "test_value");
 
         let result = parser.substitute_env_vars("Hello $TEST_VAR world");
@@ -162,7 +156,6 @@ mod tests {
     fn test_load_env_file() {
         let parser = EnvParser::new();
 
-        // Create a temporary env file
         let env_content = "TEST_KEY=test_value\n# This is a comment\nANOTHER_KEY=another_value\n";
         let mut file = fs::File::create("test.env").unwrap();
         file.write_all(env_content.as_bytes()).unwrap();
@@ -180,7 +173,6 @@ mod tests {
             Some("another_value".to_string())
         );
 
-        // Clean up
         fs::remove_file("test.env").unwrap();
     }
 

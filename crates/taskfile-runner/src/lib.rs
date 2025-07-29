@@ -16,6 +16,7 @@ pub struct TaskFile {
 pub struct Task {
     pub cmd: String,
     pub desc: Option<String>,
+    pub depends_on: Option<Vec<String>>,
 }
 
 pub struct TaskRunner {
@@ -91,30 +92,49 @@ impl TaskRunner {
             .map(|t| t.desc.as_deref().unwrap_or("No description").len())
             .max()
             .unwrap_or(0);
+        let max_deps_len = self
+            .taskfile
+            .tasks
+            .values()
+            .map(|t| {
+                t.depends_on
+                    .as_ref()
+                    .map(|deps| deps.join(", ").len())
+                    .unwrap_or(0)
+            })
+            .max()
+            .unwrap_or(0);
 
         let name_width = (max_name_len + 2).max(6);
         let desc_width = (max_desc_len + 2).max(13);
+        let deps_width = (max_deps_len + 2).max(12);
 
         println!(
-            "┌{:─<width$}┬{:─<desc_width$}┐",
+            "┌{:─<name_width$}┬{:─<desc_width$}┬{:─<deps_width$}┐",
             "",
             "",
-            width = name_width,
-            desc_width = desc_width
+            "",
+            name_width = name_width,
+            desc_width = desc_width,
+            deps_width = deps_width
         );
         println!(
-            "│ {:^width$} │ {:^desc_width$} │",
+            "│ {:^name_width$} │ {:^desc_width$} │ {:^deps_width$} │",
             "Task",
             "Description",
-            width = name_width - 2,
-            desc_width = desc_width - 2
+            "Dependencies",
+            name_width = name_width - 2,
+            desc_width = desc_width - 2,
+            deps_width = deps_width - 2
         );
         println!(
-            "├{:─<width$}┼{:─<desc_width$}┤",
+            "├{:─<name_width$}┼{:─<desc_width$}┼{:─<deps_width$}┤",
             "",
             "",
-            width = name_width,
-            desc_width = desc_width
+            "",
+            name_width = name_width,
+            desc_width = desc_width,
+            deps_width = deps_width
         );
 
         let mut tasks: Vec<_> = self.taskfile.tasks.iter().collect();
@@ -122,73 +142,117 @@ impl TaskRunner {
 
         for (name, task) in tasks {
             let desc = task.desc.as_deref().unwrap_or("No description");
+            let deps = task
+                .depends_on
+                .as_ref()
+                .map(|d| d.join(", "))
+                .unwrap_or_else(|| "-".to_string());
+
             println!(
-                "│ {:width$} │ {:desc_width$} │",
+                "│ {:name_width$} │ {:desc_width$} │ {:deps_width$} │",
                 name,
                 desc,
-                width = name_width - 2,
-                desc_width = desc_width - 2
+                deps,
+                name_width = name_width - 2,
+                desc_width = desc_width - 2,
+                deps_width = deps_width - 2
             );
         }
 
         println!(
-            "└{:─<width$}┴{:─<desc_width$}┘",
+            "└{:─<name_width$}┴{:─<desc_width$}┴{:─<deps_width$}┘",
             "",
             "",
-            width = name_width,
-            desc_width = desc_width
+            "",
+            name_width = name_width,
+            desc_width = desc_width,
+            deps_width = deps_width
         );
     }
 
     pub async fn run_task(&self, task_name: &str) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(task) = self.taskfile.tasks.get(task_name) {
-            let substituted_cmd = self.env_parser.substitute_env_vars(&task.cmd);
-            println!("Running task '{}': {}", task_name, substituted_cmd);
+        self.run_task_with_deps(task_name, &mut Vec::new()).await
+    }
 
-            let parts: Vec<&str> = substituted_cmd.split_whitespace().collect();
-            if parts.is_empty() {
-                return Err(format!("Empty command for task '{}'", task_name).into());
-            }
-
-            let command = parts[0];
-            let args = &parts[1..];
-
-            let child = Command::new(command)
-                .args(args)
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()?;
-
-            let output = child.wait_with_output().await?;
-
-            if !output.stdout.is_empty() {
-                print!("{}", String::from_utf8_lossy(&output.stdout));
-            }
-
-            if !output.stderr.is_empty() {
-                eprint!("{}", String::from_utf8_lossy(&output.stderr));
-            }
-
-            if output.status.success() {
-                println!(
-                    "{} Task '{}' completed successfully",
-                    "✓".green(),
-                    task_name
+    fn run_task_with_deps<'a>(
+        &'a self,
+        task_name: &'a str,
+        visited: &'a mut Vec<String>,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<(), Box<dyn std::error::Error>>> + 'a>,
+    > {
+        Box::pin(async move {
+            if visited.contains(&task_name.to_string()) {
+                return Err(
+                    format!("Circular dependency detected for task '{}'", task_name).into(),
                 );
-                Ok(())
+            }
+
+            if let Some(task) = self.taskfile.tasks.get(task_name) {
+                if let Some(deps) = &task.depends_on {
+                    for dep in deps {
+                        if !self.has_task(dep) {
+                            return Err(format!(
+                                "Dependency '{}' not found for task '{}'",
+                                dep, task_name
+                            )
+                            .into());
+                        }
+
+                        visited.push(task_name.to_string());
+                        self.run_task_with_deps(dep, visited).await?;
+                        visited.pop();
+                    }
+                }
+
+                let substituted_cmd = self.env_parser.substitute_env_vars(&task.cmd);
+                println!("Running task '{}': {}", task_name, substituted_cmd);
+
+                let parts: Vec<&str> = substituted_cmd.split_whitespace().collect();
+                if parts.is_empty() {
+                    return Err(format!("Empty command for task '{}'", task_name).into());
+                }
+
+                let command = parts[0];
+                let args = &parts[1..];
+
+                let child = Command::new(command)
+                    .args(args)
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()?;
+
+                let output = child.wait_with_output().await?;
+
+                if !output.stdout.is_empty() {
+                    print!("{}", String::from_utf8_lossy(&output.stdout));
+                }
+
+                if !output.stderr.is_empty() {
+                    eprint!("{}", String::from_utf8_lossy(&output.stderr));
+                }
+
+                if output.status.success() {
+                    println!(
+                        "{} Task '{}' completed successfully",
+                        "✓".green(),
+                        task_name
+                    );
+                    Ok(())
+                } else {
+                    let code = output.status.code().unwrap_or(-1);
+                    eprintln!(
+                        "{} Task '{}' failed with exit code {}",
+                        "✗".red(),
+                        task_name,
+                        code
+                    );
+                    Err(format!("Task '{}' failed with exit code {}", task_name, code).into())
+                }
             } else {
-                let code = output.status.code().unwrap_or(-1);
-                eprintln!(
-                    "{} Task '{}' failed with exit code {}",
-                    "✗".red(),
-                    task_name,
-                    code
-                );
-                Err(format!("Task '{}' failed with exit code {}", task_name, code).into())
+                Err(format!("Task '{}' not found in Taskfile", task_name).into())
             }
-        } else {
-            Err(format!("Task '{}' not found in Taskfile", task_name).into())
-        }
+        })
     }
 
     pub fn has_task(&self, task_name: &str) -> bool {
@@ -243,6 +307,7 @@ desc = "Test task"
             Task {
                 cmd: "echo 'hello'".to_string(),
                 desc: Some("Test description".to_string()),
+                depends_on: None,
             },
         );
 
