@@ -1,0 +1,20 @@
+[tasks.hello]
+cmd = "echo 'Hello, World!'"
+desc = "Print hello world message"
+
+[tasks.build]
+cmd = "echo 'Building project...'"
+desc = "Build the project"
+
+[tasks.test]
+cmd = "echo 'Running tests...'"
+desc = "Run tests"
+
+[tasks.clean]
+cmd = "echo 'Cleaning build artifacts...'"
+desc = "Clean build artifacts"
+
+[tasks.dev]
+cmd = "echo 'Starting development server...'"
+desc = "Start development server"
+depends_on = ["build"]

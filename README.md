@@ -8,6 +8,9 @@ A simple, fast task runner that executes commands defined in TOML files with env
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/lassejlv/taskfile/main/install.sh | bash
+
+# to uninstall use
+curl -sSL https://raw.githubusercontent.com/lassejlv/taskfile/main/uninstall.sh | bash
 ```
 
 ### Option 2: Download Binary
@@ -97,7 +100,7 @@ Example:
 cmd = "eslint ."
 desc = "Lint code (will use node_modules/.bin/eslint)"
 
-[tasks.format]  
+[tasks.format]
 cmd = "prettier . --write"
 desc = "Format code (will use node_modules/.bin/prettier)"
 
